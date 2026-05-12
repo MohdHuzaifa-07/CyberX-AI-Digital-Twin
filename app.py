@@ -41,10 +41,11 @@ app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_USERNAME')
 mail = Mail(app)
 
 # -------------------- LDAP CONFIG --------------------
-ldap_server_url = "ldap://127.0.0.1:389"
-ldap_user_dn = "cn=admin,dc=cyberx,dc=local"
+ldap_server_url = os.getenv('LDAP_SERVER', 'ldap://127.0.0.1:389')
+ldap_user_dn = os.getenv('LDAP_USER_DN', 'cn=admin,dc=cyberx,dc=local')
 ldap_password = os.getenv('LDAP_PASSWORD', 'admin')
-ldap_base_dn = "dc=cyberx,dc=local"
+ldap_base_dn = os.getenv('LDAP_BASE_DN', 'dc=cyberx,dc=local')
+LDAP_ENABLED = os.getenv('LDAP_ENABLED', 'true').lower() == 'true'
 
 # -------------------- LOGIN MANAGER --------------------
 login_manager = LoginManager()
@@ -250,28 +251,27 @@ def register():
             print(f"DB Register Error: {e}")
             return render_template('register.html', error='Database error. Please try again later')
 
-        # -------- LDAP SAVE --------
-        try:
-            server = Server(ldap_server_url, get_info=ALL)
-            conn = Connection(server, user=ldap_user_dn, password=ldap_password)
-            if conn.bind():
-                user_dn = f"cn={username},{ldap_base_dn}"
-                conn.add(
-                    dn=user_dn,
-                    object_class=['inetOrgPerson'],
-                    attributes={
-                        'cn': username,
-                        'sn': username,
-                        'mail': email,
-                        'userPassword': password
-                    }
-                )
-                conn.unbind()
-            else:
-                return render_template('register.html', error='Registration service temporarily unavailable')
-        except Exception as e:
-            print(f"LDAP Register Error: {e}")
-            return render_template('register.html', error='Registration service temporarily unavailable')
+        # -------- LDAP SAVE (Optional - skipped if disabled or unavailable) --------
+        if LDAP_ENABLED:
+            try:
+                server = Server(ldap_server_url, get_info=ALL)
+                conn = Connection(server, user=ldap_user_dn, password=ldap_password)
+                if conn.bind():
+                    user_dn = f"cn={username},{ldap_base_dn}"
+                    conn.add(
+                        dn=user_dn,
+                        object_class=['inetOrgPerson'],
+                        attributes={
+                            'cn': username,
+                            'sn': username,
+                            'mail': email,
+                            'userPassword': password
+                        }
+                    )
+                    conn.unbind()
+            except Exception as e:
+                print(f"LDAP unavailable (skipping): {e}")
+                # Continue without LDAP in cloud environment
 
         return redirect('/login')
 
